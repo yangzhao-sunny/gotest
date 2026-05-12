@@ -2,4 +2,897 @@ openapi: 3.1.0
 info:
   title: github.com/test/taskmgr
   version: 0.1.0
-paths: {}
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, request_id]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            request_id:
+              type: string
+              format: uuid
+
+    User:
+      type: object
+      required: [id, email, display_name, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 64
+        created_at:
+          type: string
+          format: date-time
+
+    Project:
+      type: object
+      required: [id, owner_id, name, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        owner_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        description:
+          type: string
+          maxLength: 1024
+        created_at:
+          type: string
+          format: date-time
+
+    Task:
+      type: object
+      required: [id, project_id, title, status, priority, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+          minLength: 1
+          maxLength: 256
+        status:
+          type: string
+          enum: [todo, doing, done, archived]
+        priority:
+          type: integer
+          minimum: 0
+          maximum: 3
+        assignee_id:
+          type: string
+          format: uuid
+          nullable: true
+        due_date:
+          type: string
+          format: date
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    TaskComment:
+      type: object
+      required: [id, task_id, author_id, body, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        task_id:
+          type: string
+          format: uuid
+        author_id:
+          type: string
+          format: uuid
+        body:
+          type: string
+          minLength: 1
+          maxLength: 4096
+        created_at:
+          type: string
+          format: date-time
+
+    ProjectStats:
+      type: object
+      required: [todo, doing, done, archived, overdue]
+      properties:
+        todo:
+          type: integer
+        doing:
+          type: integer
+        done:
+          type: integer
+        archived:
+          type: integer
+        overdue:
+          type: integer
+
+    TokenPair:
+      type: object
+      required: [access_token, refresh_token]
+      properties:
+        access_token:
+          type: string
+        refresh_token:
+          type: string
+
+    CursorPage:
+      type: object
+      required: [next_cursor]
+      properties:
+        next_cursor:
+          type: string
+          nullable: true
+
+paths:
+  /healthz:
+    get:
+      operationId: Healthz
+      summary: Liveness probe
+      responses:
+        "200":
+          description: alive
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+
+  /readyz:
+    get:
+      operationId: Readyz
+      summary: Readiness probe (DB + Redis)
+      responses:
+        "200":
+          description: ready
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+        "503":
+          description: not ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /v1/auth/register:
+    post:
+      operationId: Register
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, display_name]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  minLength: 8
+                display_name:
+                  type: string
+                  minLength: 1
+                  maxLength: 64
+      responses:
+        "201":
+          description: user created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        "400":
+          description: validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "409":
+          description: email already registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /v1/auth/login:
+    post:
+      operationId: Login
+      summary: Login and obtain token pair
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+      responses:
+        "200":
+          description: token pair
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenPair'
+        "401":
+          description: invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /v1/auth/refresh:
+    post:
+      operationId: RefreshToken
+      summary: Exchange refresh token for new access token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token:
+                  type: string
+      responses:
+        "200":
+          description: new access token
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [access_token]
+                properties:
+                  access_token:
+                    type: string
+        "401":
+          description: invalid or expired refresh token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /v1/auth/logout:
+    post:
+      operationId: Logout
+      summary: Invalidate refresh token
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token:
+                  type: string
+      responses:
+        "204":
+          description: logged out
+        "401":
+          description: unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /v1/users/me:
+    get:
+      operationId: GetMe
+      summary: Get current user profile
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: current user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        "401":
+          description: unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    patch:
+      operationId: UpdateMe
+      summary: Update display_name
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [display_name]
+              properties:
+                display_name:
+                  type: string
+                  minLength: 1
+                  maxLength: 64
+      responses:
+        "200":
+          description: updated user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        "400":
+          description: validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          description: unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /v1/projects:
+    post:
+      operationId: CreateProject
+      summary: Create a project
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 128
+                description:
+                  type: string
+                  maxLength: 1024
+      responses:
+        "201":
+          description: project created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        "400":
+          description: validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          description: unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    get:
+      operationId: ListProjects
+      summary: List projects owned by current user (cursor pagination)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: cursor
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+      responses:
+        "200":
+          description: project list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, next_cursor]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Project'
+                  next_cursor:
+                    type: string
+                    nullable: true
+        "401":
+          description: unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /v1/projects/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: GetProject
+      summary: Get project detail (404 if not owner)
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: project
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        "404":
+          description: not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    patch:
+      operationId: UpdateProject
+      summary: Update project name/description
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 128
+                description:
+                  type: string
+                  maxLength: 1024
+      responses:
+        "200":
+          description: updated project
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        "400":
+          description: validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      operationId: DeleteProject
+      summary: Soft-delete project and cascade soft-delete tasks
+      security:
+        - BearerAuth: []
+      responses:
+        "204":
+          description: deleted
+        "404":
+          description: not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /v1/projects/{id}/tasks:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: CreateTask
+      summary: Create a task in a project
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                title:
+                  type: string
+                  minLength: 1
+                  maxLength: 256
+                priority:
+                  type: integer
+                  minimum: 0
+                  maximum: 3
+                  default: 1
+                assignee_id:
+                  type: string
+                  format: uuid
+                due_date:
+                  type: string
+                  format: date
+      responses:
+        "201":
+          description: task created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        "400":
+          description: validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    get:
+      operationId: ListTasks
+      summary: List tasks in a project with filters and cursor pagination
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [todo, doing, done, archived]
+        - name: assignee_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: cursor
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+      responses:
+        "200":
+          description: task list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, next_cursor]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Task'
+                  next_cursor:
+                    type: string
+                    nullable: true
+        "404":
+          description: project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /v1/projects/{id}/stats:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: GetProjectStats
+      summary: Get task count stats for a project (cached 60s in Redis)
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: stats
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectStats'
+        "404":
+          description: project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /v1/tasks/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: GetTask
+      summary: Get task detail with last 5 comments
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: task with recent comments
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Task'
+                  - type: object
+                    properties:
+                      recent_comments:
+                        type: array
+                        maxItems: 5
+                        items:
+                          $ref: '#/components/schemas/TaskComment'
+        "404":
+          description: not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    patch:
+      operationId: UpdateTask
+      summary: Update task fields
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                  minLength: 1
+                  maxLength: 256
+                status:
+                  type: string
+                  enum: [todo, doing, done, archived]
+                priority:
+                  type: integer
+                  minimum: 0
+                  maximum: 3
+                assignee_id:
+                  type: string
+                  format: uuid
+                  nullable: true
+                due_date:
+                  type: string
+                  format: date
+                  nullable: true
+      responses:
+        "200":
+          description: updated task
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        "400":
+          description: validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      operationId: DeleteTask
+      summary: Delete a task
+      security:
+        - BearerAuth: []
+      responses:
+        "204":
+          description: deleted
+        "404":
+          description: not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /v1/tasks/{id}/transitions:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: TransitionTask
+      summary: Transition task status via state machine
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [todo, doing, done, archived]
+      responses:
+        "200":
+          description: transitioned task
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        "404":
+          description: not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "409":
+          description: invalid transition
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /v1/tasks/{id}/comments:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: CreateComment
+      summary: Post a comment on a task
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [body]
+              properties:
+                body:
+                  type: string
+                  minLength: 1
+                  maxLength: 4096
+      responses:
+        "201":
+          description: comment created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskComment'
+        "404":
+          description: task not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "429":
+          description: rate limited (3 comments per 10s per user per task)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    get:
+      operationId: ListComments
+      summary: List comments on a task (cursor pagination)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: cursor
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+      responses:
+        "200":
+          description: comment list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, next_cursor]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TaskComment'
+                  next_cursor:
+                    type: string
+                    nullable: true
+        "404":
+          description: task not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
