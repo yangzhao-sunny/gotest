@@ -1,0 +1,11 @@
+DROP INDEX IF EXISTS idx_task_comments_task_id;
+DROP TABLE IF EXISTS task_comments;
+DROP INDEX IF EXISTS idx_tasks_project_status;
+DROP INDEX IF EXISTS idx_tasks_project_id;
+DROP TABLE IF EXISTS tasks;
+DROP TYPE IF EXISTS task_status;
+DROP INDEX IF EXISTS idx_projects_owner_id;
+DROP TABLE IF EXISTS projects;
+DROP INDEX IF EXISTS idx_refresh_tokens_token;
+DROP TABLE IF EXISTS refresh_tokens;
+DROP TABLE IF EXISTS users;
