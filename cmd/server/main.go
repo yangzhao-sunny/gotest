@@ -28,13 +28,9 @@ func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	slog.SetDefault(logger)
 
-	cfg, err := config.Load()
-	if err != nil {
-		slog.Error("config", "err", err)
-		os.Exit(1)
-	}
+	port := config.EnvOr("TASKMGR_PORT", "8080")
 
-	router, cleanup, err := buildApp(cfg)
+	router, cleanup, err := buildApp()
 	if err != nil {
 		slog.Error("failed to initialize app", "err", err)
 		os.Exit(1)
@@ -42,7 +38,7 @@ func main() {
 	defer cleanup()
 
 	srv := &http.Server{
-		Addr:    ":" + cfg.ServerPort,
+		Addr:    ":" + port,
 		Handler: router,
 	}
 
@@ -51,7 +47,7 @@ func main() {
 			slog.Error("server error", "err", err)
 		}
 	}()
-	slog.Info("server started", "port", cfg.ServerPort)
+	slog.Info("server started", "port", port)
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
@@ -65,7 +61,12 @@ func main() {
 	}
 }
 
-func buildApp(cfg *config.Config) (*gin.Engine, func(), error) {
+func buildApp() (*gin.Engine, func(), error) {
+	cfg, err := config.Load()
+	if err != nil {
+		return nil, nil, err
+	}
+
 	ctx := context.Background()
 
 	pool, err := db.NewPool(ctx, cfg.DBDsn)

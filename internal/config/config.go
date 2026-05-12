@@ -37,6 +37,8 @@ func Load() (*Config, error) {
 	}, nil
 }
 
+func EnvOr(key, def string) string { return envOr(key, def) }
+
 func envOr(key, def string) string {
 	if v := os.Getenv(key); v != "" {
 		return v

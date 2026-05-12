@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/test/taskmgr/internal/config"
 )
 
 func init() { gin.SetMode(gin.TestMode) }
@@ -26,16 +25,11 @@ func TestHealthzRoute(t *testing.T) {
 }
 
 func TestConfigLoad_BuildApp(t *testing.T) {
-	// Ensure buildApp returns error when config is invalid (no DB)
-	cfg := &config.Config{
-		ServerPort:      "8080",
-		DBDsn:           "postgres://bad:bad@localhost:19999/nodb?sslmode=disable&connect_timeout=1",
-		RedisAddr:       "localhost:16379",
-		JWTSecret:       "test",
-		AccessTokenTTL:  60,
-		RefreshTokenTTL: 30,
-	}
-	_, cleanup, err := buildApp(cfg)
+	// Ensure buildApp returns error when config env vars are not set
+	t.Setenv("TASKMGR_DB_DSN", "postgres://bad:bad@localhost:19999/nodb?sslmode=disable&connect_timeout=1")
+	t.Setenv("TASKMGR_JWT_SECRET", "test")
+	t.Setenv("TASKMGR_REDIS_ADDR", "localhost:16379")
+	_, cleanup, err := buildApp()
 	if err == nil {
 		cleanup()
 		t.Fatal("expected error when DB unreachable")
