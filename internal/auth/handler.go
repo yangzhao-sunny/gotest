@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -23,7 +24,11 @@ func (h *Handler) Register(c *gin.Context) {
 	}
 	u, err := h.svc.Register(c.Request.Context(), req.Email, req.Password, req.DisplayName)
 	if err != nil {
-		c.JSON(http.StatusConflict, apiErr("email_taken", err.Error(), reqID(c)))
+		if errors.Is(err, ErrEmailTaken) {
+			c.JSON(http.StatusConflict, apiErr("email_taken", "email already registered", reqID(c)))
+		} else {
+			c.JSON(http.StatusInternalServerError, apiErr("internal_error", "registration failed", reqID(c)))
+		}
 		return
 	}
 	c.JSON(http.StatusCreated, userResp(u))

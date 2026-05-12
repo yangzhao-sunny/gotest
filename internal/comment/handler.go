@@ -40,16 +40,16 @@ func (h *Handler) Create(c *gin.Context) {
 		return
 	}
 
-	// Rate limiting
+	// Rate limiting — pipeline makes INCR+EXPIRE atomic under failure
 	key := fmt.Sprintf("ratelimit:comment:%s:%s", userID, taskID)
-	count, err := h.redis.Incr(c.Request.Context(), key).Result()
-	if err != nil {
+	pipe := h.redis.Pipeline()
+	incrCmd := pipe.Incr(c.Request.Context(), key)
+	pipe.Expire(c.Request.Context(), key, 10*time.Second)
+	if _, err = pipe.Exec(c.Request.Context()); err != nil {
 		c.JSON(http.StatusInternalServerError, apiErr("internal_error", "rate limit check failed", reqID(c)))
 		return
 	}
-	if count == 1 {
-		h.redis.Expire(c.Request.Context(), key, 10*time.Second)
-	}
+	count := incrCmd.Val()
 	if count > 3 {
 		c.JSON(http.StatusTooManyRequests, apiErr("rate_limited", "too many comments in this window", reqID(c)))
 		return

@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -9,6 +10,8 @@ import (
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 )
+
+var ErrEmailTaken = errors.New("email_taken")
 
 type Service struct {
 	repo            *Repo
@@ -32,7 +35,7 @@ func (s *Service) Register(ctx context.Context, email, password, displayName str
 		return nil, err
 	}
 	if existing != nil {
-		return nil, fmt.Errorf("email_taken: %s already registered", email)
+		return nil, ErrEmailTaken
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {

@@ -1,10 +1,8 @@
 package task
 
 import (
-	"context"
 	"net/http"
 	"strconv"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/test/taskmgr/internal/middleware"
@@ -17,9 +15,9 @@ type Notifier interface {
 }
 
 type Handler struct {
-	repo      *Repo
-	projRepo  *project.Repo
-	notifier  Notifier
+	repo     *Repo
+	projRepo *project.Repo
+	notifier Notifier
 }
 
 func NewHandler(repo *Repo, projRepo *project.Repo, notifier Notifier) *Handler {
@@ -231,11 +229,7 @@ func (h *Handler) Transition(c *gin.Context) {
 
 	newStatus := Status(req.Status)
 	if err := ValidateTransition(existing.Status, newStatus); err != nil {
-		code := "task_invalid_transition"
-		if strings.Contains(err.Error(), "task_invalid_transition") {
-			code = "task_invalid_transition"
-		}
-		c.JSON(http.StatusConflict, apiErr(code, err.Error(), reqID(c)))
+		c.JSON(http.StatusConflict, apiErr("task_invalid_transition", err.Error(), reqID(c)))
 		return
 	}
 
@@ -267,9 +261,3 @@ func reqID(c *gin.Context) string { return c.GetString(middleware.RequestIDKey) 
 func apiErr(code, message, requestID string) gin.H {
 	return gin.H{"error": gin.H{"code": code, "message": message, "request_id": requestID}}
 }
-
-// contextKey is used for context values.
-type contextKey struct{ name string }
-
-// Ensure context.Context is imported
-var _ = context.Background
