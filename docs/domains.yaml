@@ -1,0 +1,4 @@
+# slug: short identifier for the domain
+# description: one sentence
+# use_when: when to route work to this domain
+domains: []

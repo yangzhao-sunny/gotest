@@ -1,0 +1,3 @@
+module: github.com/test/taskmgr
+coverage_threshold: 80
+go_standards: true
