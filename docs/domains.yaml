@@ -1,0 +1,31 @@
+# slug: short identifier for the domain
+# description: one sentence
+# use_when: when to route work to this domain
+domains:
+  - slug: auth
+    description: User registration, login, JWT issuance/validation, refresh token lifecycle.
+    use_when: Working on authentication flows, token management, or password handling.
+
+  - slug: user
+    description: User profile reads and updates for the authenticated caller.
+    use_when: Working on /v1/users/me endpoints or user profile data.
+
+  - slug: project
+    description: Project CRUD with ownership enforcement and soft-delete cascade.
+    use_when: Working on project creation, listing, update, or deletion flows.
+
+  - slug: task
+    description: Task lifecycle including status-machine transitions, filtering, and pagination.
+    use_when: Working on task creation, updates, state transitions, or task queries.
+
+  - slug: comment
+    description: Task comments with per-user Redis rate limiting (3 per 10 s per task).
+    use_when: Working on comment posting, listing, or rate-limit enforcement.
+
+  - slug: stats
+    description: Aggregated task-count statistics per project, cached 60 s in Redis.
+    use_when: Working on the stats endpoint or cache invalidation logic.
+
+  - slug: health
+    description: Liveness and readiness probes for the service and its dependencies.
+    use_when: Working on /healthz or /readyz endpoints.

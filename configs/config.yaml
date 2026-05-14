@@ -1,0 +1,8 @@
+server:
+  port: ${PORT:8080}
+
+db:
+  dsn: ${DATABASE_URL}
+
+redis:
+  addr: ${REDIS_ADDR:localhost:6379}
